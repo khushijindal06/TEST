@@ -1,0 +1,1027 @@
+\documentclass[runningheads]{llncs}
+% 
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{siunitx}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{booktabs}
+\usepackage[hidelinks]{hyperref}
+\usepackage{hyperref}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{makecell}
+\usepackage{subcaption}
+
+\begin{document}
+
+\title{Transformer-Based Spectral Unmixing for Lunar Mineral Mapping}
+\author{
+Nishant\inst{1} \and
+Bindu Verma\inst{1} \and
+Kapil Sharma\inst{1}
+}
+
+\authorrunning{Nishant et al.}
+
+\institute{
+Department of Information Technology, Delhi Technological University, Delhi, India\\
+\email{nishantsinghchauhan0010@gmail.com, bindu.cvision@gmail.com, kapil@ieee.org}
+}
+\maketitle              
+%
+
+\begin{abstract}
+Hyperspectral imaging supports planetary mineral exploration by providing spectral information about lunar materials. However, lunar mineral mapping remains challenging because of spectral dimensionality, mixing, nonlinear variability, and long-range dependencies. This study presents a one-dimensional Vision Transformer (ViT) for spectral unmixing and mineral abundance estimation using Chandrayaan-2 Imaging Infrared Spectrometer (IIRS) observations. Each spectrum is represented as spectral patches, and self-attention learns long-range relationships. The dual-head architecture reconstructs spectra and predicts non-negative, sum-to-one mineral fractions through a Softmax abundance head; chunk-wise inference enables full-scene mapping. Independent reference abundances are not specified; therefore, abundance accuracy requires assessment. On held-out IIRS observations, the model achieved an RMSE of 0.03637, MAE of 0.01420, and SAD of 0.02314 for spectral reconstruction, alongside an abundance-sum mean of 1.00000 and zero negative-abundance ratio. Full-scene inference produced predicted mineral distributions, with mare basalt, pyroxene, and spinel accounting for 63.61\%, 16.90\%, and 14.92\% of mapped pixels, respectively. Evaluation is limited to IIRS observations and predefined endmembers; cross-mission generalization remains unverified. These results demonstrate the potential of one-dimensional transformer-based spectral learning for lunar mineral mapping.
+
+
+
+
+\keywords{Hyperspectral imaging \and Vision Transformer \and Spectral
+unmixing \and Lunar mineral mapping \and Chandrayaan-2 IIRS \and
+Mineral abundance estimation}
+
+
+\end{abstract}
+
+
+\section{Introduction}
+
+Hyperspectral imaging (HSI) is an important remote sensing technology
+for planetary surface analysis, providing continuous spectral information
+across hundreds of wavelength bands. In lunar exploration, HSI supports
+the characterization of surface mineralogy and geological composition.
+The Imaging Infrared Spectrometer (IIRS) onboard Chandrayaan-2 acquires
+256 spectral bands spanning approximately $0.8$--$5.0~\si{\micro\metre}$,
+providing diagnostic spectral information for lunar mineral
+identification \cite{chowdhury2020iirs,chauhan2021hydration}.
+
+Despite this capability, lunar hyperspectral analysis remains
+challenging owing to high spectral dimensionality, spectral
+redundancy, instrumental noise, illumination variability, and spectral
+mixing. Conventional spectral unmixing methods, including fully
+constrained least squares unmixing (FCLSU) and non-negative matrix
+factorization (NMF), estimate mineral contributions using predefined
+mixing assumptions or matrix decomposition. However, FCLSU relies on
+a linear mixing model and predefined endmembers, whereas NMF involves
+non-convex optimization and sensitivity to initialization
+\cite{bioucas2012unmixing}. Deep learning has improved hyperspectral
+representation learning through nonlinear feature extraction
+\cite{zhang2016deeplearning,paoletti2019review}. However, CNN-based
+methods primarily capture local spectral patterns and may have limited
+capability to model long-range dependencies across spectral bands.
+
+Transformer-based methods address this limitation through self-attention
+and global spectral representation learning. SpectralFormer,
+spatial-spectral transformers, and dual attention transformers have
+demonstrated the effectiveness of transformer-based learning for
+hyperspectral analysis \cite{hong2022spectralformer,he2021sst,shu2024datn}.
+Vision Transformers (ViTs) represent inputs as token sequences
+processed through multi-head self-attention
+\cite{dosovitskiy2021vit}. Unlike conventional CNNs, a one-dimensional
+ViT can establish relationships between distant spectral regions
+through attention mechanisms. Nevertheless, most existing methods
+primarily address supervised hyperspectral classification, with
+comparatively limited exploration of transformer-based spectral
+unmixing for quantitative mineral abundance estimation.
+
+An important distinction exists between spectral reconstruction and
+mineral abundance estimation. Reconstruction measures how closely
+predicted spectra approximate observed reflectance, whereas abundance
+estimation determines the fractional contribution of individual mineral
+components. Consequently, low reconstruction error alone does not
+establish geologically reliable mineral abundance estimates. Existing
+reconstruction-oriented approaches may preserve spectral characteristics
+without necessarily ensuring physically meaningful mineral fractions.
+Addressing this distinction requires joint spectral representation
+learning and physically constrained abundance prediction. A one-dimensional
+ViT provides a suitable framework for modelling long-range spectral
+relationships, while non-negativity and sum-to-one constraints promote
+physically plausible abundance representations.
+
+To address these limitations, this study proposes a one-dimensional
+Vision Transformer framework for spectral unmixing and lunar mineral
+mapping using Chandrayaan-2 IIRS observations. Each 256-band spectrum is
+divided into contiguous 16-band spectral patches and projected onto a
+token sequence. A pre-layer normalization ViT with six encoder layers,
+256-dimensional embeddings, and eight attention heads models local
+spectral characteristics and long-range dependencies
+\cite{dosovitskiy2021vit,xiong2020layernorm}. The shared latent
+representation supports two complementary heads for spectral
+reconstruction and mineral abundance prediction, with the latter
+subject to non-negativity and sum-to-one constraints.
+
+For large-scale mapping, a chunk-wise inference strategy processes
+complete IIRS scenes using manageable batches, followed by abundance
+reconstruction, Gaussian spatial smoothing, and dominant-mineral
+assignment. Photometric correction is applied during preprocessing to
+improve the radiometric consistency of IIRS observations
+\cite{sharma2024photometric}. The framework is evaluated through
+spectral reconstruction metrics, abundance consistency analysis, and
+full-scene mineral mapping.
+
+The major contributions of this work are summarized as follows:
+
+\begin{enumerate}
+
+\item \textbf{A one-dimensional Vision Transformer framework} was
+proposed to learn long-range spectral dependencies from Chandrayaan-2
+IIRS observations using spectral patch tokenization.
+
+\item \textbf{A dual-head learning strategy} jointly performs spectral
+reconstruction and physically constrained mineral abundance prediction
+using a shared spectral representation.
+
+\item \textbf{A scalable full-scene inference pipeline} for lunar mineral
+mapping was developed using chunk-wise processing, abundance
+reconstruction, Gaussian smoothing, and dominant-mineral assignment.
+
+\item \textbf{An experimental evaluation} was performed on real IIRS
+observations using spectral reconstruction metrics, abundance
+consistency measures, and full-scene mineral distribution analysis.
+
+\end{enumerate}
+
+The remainder of this paper is organized as follows.
+Section~\ref{sec:related_work} reviews hyperspectral analysis, spectral
+unmixing, and transformer-based learning. Section~\ref{sec:methodology}
+presents the proposed framework and full-scene inference strategy.
+Section~\ref{sec:results} discusses the experimental results, and
+Section~\ref{sec:conclusion} concludes the paper.
+
+
+\section{Related Work}
+\label{sec:related_work}
+
+\subsection{Hyperspectral Analysis and Spectral Unmixing}
+
+Hyperspectral analysis commonly employs spectral unmixing to decompose
+mixed pixels into constituent endmembers and their fractional
+abundances. Fully Constrained Least Squares Unmixing (FCLSU) enforces
+non-negativity and abundance-sum constraints, whereas Non-negative
+Matrix Factorization (NMF) estimates non-negative endmember and
+abundance matrices through iterative optimization. However, FCLSU
+depends on predefined endmembers and linear mixing assumptions, while
+NMF is sensitive to initialization and may converge to local optima
+\cite{bioucas2012unmixing,wang2023integration}. Sparse regression-based
+methods further exploit spectral libraries to estimate material
+contributions, although their performance depends on library
+representativeness. Nonlinear unmixing approaches address complex
+material interactions but introduce additional modelling
+complexity \cite{zhou2024blind,zhu2024pslr}. For lunar applications,
+Chandrayaan-2 IIRS provides hyperspectral observations for mineralogical
+and hydration analyses \cite{chowdhury2020iirs,chauhan2021hydration},
+whereas photometric correction reduces illumination-induced variations
+\cite{sharma2024photometric}.
+
+\subsection{Deep Learning and Transformer-Based Methods}
+
+Deep learning has improved HSI analysis through nonlinear
+representation learning and automatic spectral--spatial feature
+extraction \cite{zhang2016deeplearning,paoletti2019review}. CNNs
+effectively capture local features but have limited capability to model
+long-range spectral dependencies. Transformers address this limitation
+through self-attention, while Vision Transformers (ViTs) represent
+inputs as token sequences processed through Multi-Head Self-Attention
+(MHSA) \cite{dosovitskiy2021vit}. SpectralFormer, spatial-spectral
+transformers, and dual attention transformer networks demonstrate
+effective spectral representation learning for HSI classification
+\cite{hong2022spectralformer,he2021sst,shu2024datn}. More recent
+unmixing-oriented transformer architectures combine convolutional
+feature extraction and attention to estimate endmembers and abundances
+\cite{hadi2023dctnu,ratnayake2024fusionnet}. Nevertheless, these
+approaches differ in their spatial context and architectural
+requirements, while efficient one-dimensional spectral modelling for
+large-scale planetary unmixing remains relatively unexplored.
+
+\begin{table}[t]
+\centering
+\caption{Comparison of representative hyperspectral analysis and
+spectral unmixing approaches.}
+\label{tab:related_work}
+\scriptsize
+\setlength{\tabcolsep}{2.5pt}
+\renewcommand{\arraystretch}{1.15}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Approach} &
+\textbf{Endmember} &
+\textbf{Abundance} &
+\textbf{Recon.} &
+\textbf{Supervision} &
+\textbf{Complexity} &
+\textbf{Task} \\
+\midrule
+FCLSU \cite{bioucas2012unmixing}
+& Given & Yes & Yes & Unsupervised
+& Iterative & Unmixing \\
+
+NMF \cite{bioucas2012unmixing}
+& Joint & Yes & Yes & Unsupervised
+& Iterative & Unmixing \\
+
+CNN-based HSI \cite{paoletti2019review}
+& N/A & N/A & N/A & Supervised
+& Architecture-dependent & Classification \\
+
+DAEN \cite{su2019daen}
+& Joint & Yes & Yes & Unsupervised
+& Multi-stage & Unmixing \\
+
+DCTNU \cite{hadi2023dctnu}
+& Yes & Yes & Yes & Data-driven
+& Multi-module & Unmixing \\
+
+Double-DIP \cite{zhou2024blind}
+& Joint & Yes & Yes & Unsupervised
+& Multi-module & Unmixing \\
+
+SpectralFormer \cite{hong2022spectralformer}
+& N/A & N/A & N/A & Supervised
+& Transformer & Classification \\
+
+\textbf{Proposed method}
+& \textbf{Predefined} & \textbf{Yes}
+& \textbf{Yes} & \textbf{To be specified}
+& \textbf{Transformer} & \textbf{Unmixing + mapping} \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\subsection{Deep Learning-Based Spectral Unmixing}
+
+Deep learning-based unmixing methods employ nonlinear representation
+learning for endmember extraction and abundance estimation. Deep
+Autoencoder Networks (DAEN) combine stacked autoencoders and variational
+autoencoders for unsupervised endmember and abundance estimation
+\cite{su2019daen}. Convolutional autoencoder-based methods further
+incorporate spatial context into spectral reconstruction
+\cite{yu2022multistage}. Deep convolutional transformer networks
+integrate convolutional feature extraction with token-based attention
+for joint endmember and abundance estimation \cite{hadi2023dctnu}.
+Similarly, deep image prior-based approaches investigate blind
+unmixing under linear and nonlinear mixing assumptions
+\cite{zhou2024blind}. Although these methods improve nonlinear
+representation learning, their computational requirements, mixing
+assumptions, and endmember initialization strategies differ. Their
+application to large-scale planetary observations therefore requires
+further investigation.
+
+\subsection{Research Gap}
+
+The literature reveals three major limitations: (1) conventional
+unmixing methods depend on predefined mixing assumptions or iterative
+optimization; (2) most transformer-based HSI studies emphasize
+classification, while deep unmixing methods commonly employ
+autoencoder-based or spatial--spectral architectures; and (3)
+computationally scalable one-dimensional spectral unmixing for
+complete orbital observations remains relatively unexplored.
+Furthermore, spectral reconstruction alone does not establish the
+geological reliability of estimated mineral abundances. To address
+these gaps, the proposed framework employs a one-dimensional ViT for
+long-range spectral modelling, complementary spectral reconstruction
+and physically constrained abundance prediction, and chunk-wise
+inference for lunar mineral mapping. Table~\ref{tab:related_work}
+summarizes the methodological differences between representative
+approaches.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Methodology}
+\label{sec:methodology}
+
+The proposed framework performs hyperspectral representation learning
+and lunar mineral mapping using Chandrayaan-2 IIRS observations. As
+shown in Fig.~\ref{fig:framework}, the complete pipeline comprises
+spectral preprocessing, one-dimensional spectral tokenization, Vision
+Transformer encoding, dual-task prediction, joint optimization, and
+scalable full-scene inference. The framework captures long-range
+spectral dependencies while generating non-negative and normalized
+mineral abundance estimates.
+
+%===========================================================
+% Overall Architecture
+%===========================================================
+\begin{figure*}[!t]
+    \centering
+    \includegraphics[
+        width=\textwidth,
+        height=0.90\textheight,
+        keepaspectratio
+    ]{main.png}
+
+    \caption{Overall architecture of the proposed one-dimensional
+    Vision Transformer for hyperspectral spectral unmixing and lunar
+    mineral mapping.}
+
+    \label{fig:framework}
+\end{figure*}
+%===========================================================
+
+\subsection{Data Preparation and Spectral Tokenisation}
+\label{subsec:data_tokenisation}
+
+The Chandrayaan-2 IIRS observations contain 256 spectral channels
+spanning approximately $0.8$--$5.0~\si{\micro\metre}$. Each spatial
+pixel is represented as a spectral signature
+$\mathbf{x}\in\mathbb{R}^{C_0}$, where $C_0=256$. Noisy edge channels
+and thermally contaminated wavelengths beyond
+$3.5~\si{\micro\metre}$ were masked, retaining $C$ valid spectral
+channels. The exact number of retained channels is reported in
+the experimental configuration. The observations were obtained
+from [VERIFY: exact IIRS data source and observation identifiers],
+covering [VERIFY: geographical coordinates or study region].
+
+Photometric correction was applied during preprocessing to improve
+the radiometric consistency of IIRS observations
+\cite{sharma2024photometric}. The remaining spectra were independently
+normalized using min--max normalization:
+
+\begin{equation}
+x'_j =
+\frac{x_j-\min(\mathbf{x})}
+{\max(\mathbf{x})-\min(\mathbf{x})},
+\qquad j=1,\ldots,C .
+\label{eq:normalisation}
+\end{equation}
+
+The normalized observations were divided into training, validation,
+and testing subsets using a [VERIFY: spatially disjoint or other]
+partitioning strategy, with a split ratio of
+[VERIFY: training/validation/testing percentages]. The corresponding
+sample counts were [VERIFY: training pixels],
+[VERIFY: validation pixels], and [VERIFY: testing pixels].
+Spatial separation was maintained [VERIFY: explain the actual
+procedure used to prevent spatial leakage].
+
+Each normalized spectrum is divided into non-overlapping spectral
+patches of length $P=16$:
+
+\begin{equation}
+\tilde{\mathbf{x}}^{(i)}\in\mathbb{R}^{P},
+\qquad
+N=\left\lfloor\frac{C}{P}\right\rfloor ,
+\label{eq:patching}
+\end{equation}
+
+where $N$ denotes the number of spectral tokens. For each patch,
+a linear projection maps the spectral values into a $D$-dimensional
+embedding space, followed by a learnable positional embedding:
+
+\begin{equation}
+\mathbf{z}^{(i)}
+=
+\mathbf{W}_{E}\tilde{\mathbf{x}}^{(i)}
++
+\mathbf{e}^{(i)} .
+\label{eq:embedding}
+\end{equation}
+
+A learnable class token is prepended to aggregate global spectral
+information:
+
+\begin{equation}
+\mathbf{Z}^{(0)}
+=
+[\mathbf{z}_{\mathrm{cls}},
+\mathbf{z}^{(1)},\ldots,\mathbf{z}^{(N)}]
+\in\mathbb{R}^{(N+1)\times D}.
+\label{eq:input_sequence}
+\end{equation}
+
+This ordered spectral representation enables the transformer to
+learn local absorption characteristics and long-range spectral
+relationships \cite{dosovitskiy2021vit}. The mineral categories
+considered in this study comprise plagioclase, pyroxene, olivine,
+ilmenite, spinel, glass, anorthosite, and mare basalt. Their
+endmember/reference information was obtained from
+[VERIFY: actual spectral library or reference source], with the
+selection procedure described accordingly.
+
+\subsection{One-Dimensional Vision Transformer Encoder}
+\label{subsec:encoder}
+
+The spectral token sequence is processed by a pre-layer
+normalization ViT consisting of $L$ transformer blocks. Each block
+contains multi-head self-attention (MHSA) and a feed-forward network
+(FFN):
+
+\begin{align}
+\mathbf{Z}'_{\ell}
+&=
+\mathbf{Z}_{\ell-1}
++
+\alpha\,\mathrm{MHSA}
+\left(\mathrm{LN}(\mathbf{Z}_{\ell-1})\right),
+\\
+\mathbf{Z}_{\ell}
+&=
+\mathbf{Z}'_{\ell}
++
+\alpha\,\mathrm{FFN}
+\left(\mathrm{LN}(\mathbf{Z}'_{\ell})\right).
+\label{eq:transformer_block}
+\end{align}
+
+Here, $\alpha$ denotes a learnable residual scaling parameter
+that adjusts the contribution of each attention and feed-forward
+branch to the residual representation. This scaling helps control
+the magnitude of residual updates during optimization.
+Pre-Layer Normalization improves optimization stability
+\cite{xiong2020layernorm}.
+
+For attention head $h$,
+
+\begin{equation}
+\mathbf{Q}_{h}=\mathbf{Z}\mathbf{W}_{h}^{Q},
+\qquad
+\mathbf{K}_{h}=\mathbf{Z}\mathbf{W}_{h}^{K},
+\qquad
+\mathbf{V}_{h}=\mathbf{Z}\mathbf{W}_{h}^{V},
+\end{equation}
+
+and scaled dot-product attention is computed as
+
+\begin{equation}
+\mathrm{Attention}_{h}
+=
+\mathrm{softmax}
+\left(
+\frac{\mathbf{Q}_{h}\mathbf{K}_{h}^{\top}}
+{\sqrt{d_k}}
+\right)
+\mathbf{V}_{h}.
+\label{eq:attention}
+\end{equation}
+
+The FFN uses GELU activation \cite{hendrycks2016gelu}:
+
+\begin{equation}
+\mathrm{FFN}(\mathbf{z})
+=
+\mathbf{W}_{2}
+\mathrm{GELU}
+\left(
+\mathbf{W}_{1}\mathbf{z}+\mathbf{b}_{1}
+\right)
++\mathbf{b}_{2}.
+\label{eq:ffn}
+\end{equation}
+
+The implemented encoder uses six transformer layers, a
+256-dimensional embedding space, and eight attention heads.
+The training configuration comprises a batch size of
+[VERIFY], learning rate of [VERIFY], dropout rate of [VERIFY],
+weight decay of [VERIFY], and [VERIFY] training epochs.
+AdamW optimization with cosine learning-rate scheduling and
+linear warm-up is employed. Experiments were conducted using
+[VERIFY: processor/GPU, RAM, operating system, Python and
+PyTorch versions].
+
+\subsection{Dual-Task Learning and Optimization}
+\label{subsec:dual_task}
+
+The final class-token representation
+$\mathbf{z}_{\mathrm{cls}}^{(L)}\in\mathbb{R}^{D}$ is shared by
+two prediction heads. The reconstruction head estimates the
+input spectrum:
+
+\begin{equation}
+\hat{\mathbf{x}}
+=
+\mathbf{W}_{R}\mathbf{z}_{\mathrm{cls}}^{(L)}
++\mathbf{b}_{R}.
+\label{eq:reconstruction}
+\end{equation}
+
+The abundance head predicts the mineral contribution scores using
+Softmax:
+
+\begin{equation}
+\hat{\mathbf{a}}
+=
+\mathrm{softmax}
+\left(
+\mathbf{W}_{A}\mathbf{z}_{\mathrm{cls}}^{(L)}
++\mathbf{b}_{A}
+\right).
+\label{eq:abundance}
+\end{equation}
+
+For $K=8$ mineral categories, the predicted abundance vector
+satisfies the non-negativity and sum-to-one constraints:
+
+\begin{equation}
+\sum_{k=1}^{K}\hat{a}_{k}=1,
+\qquad
+\hat{a}_{k}\geq0.
+\label{eq:abundance_constraint}
+\end{equation}
+
+These constraints ensure that the predicted outputs form
+normalized non-negative abundance scores. However, satisfying
+these constraints alone does not establish the geological
+accuracy of the estimated mineral fractions.
+
+The joint optimization objective is expressed as
+
+\begin{equation}
+\mathcal{L}
+=
+\mathcal{L}_{\mathrm{recon}}
++
+\lambda\mathcal{L}_{\mathrm{abund}},
+\label{eq:joint_loss}
+\end{equation}
+
+where $\mathcal{L}_{\mathrm{recon}}$ denotes the spectral
+reconstruction loss, $\mathcal{L}_{\mathrm{abund}}$ represents
+the abundance-learning objective, and $\lambda$ controls their
+relative contribution. The reconstruction loss is calculated
+using mean squared error:
+
+\begin{equation}
+\mathcal{L}_{\mathrm{recon}}
+=
+\frac{1}{BC}
+\sum_{i=1}^{B}
+\sum_{j=1}^{C}
+(x_{ij}-\hat{x}_{ij})^2,
+\label{eq:reconstruction_loss}
+\end{equation}
+
+where $B$ represents the batch size and $C$ denotes the number
+of retained spectral channels.
+
+[VERIFY: Specify the actual abundance-learning objective,
+its reference targets, and the procedure used to generate
+or obtain those targets. If independent abundance labels
+are unavailable, clarify whether the objective uses
+pseudo-labels or an unsupervised regularization strategy.]
+
+The two objectives are jointly optimized using AdamW with
+cosine learning-rate scheduling and linear warm-up. Dropout
+is employed for regularization, and the model with the minimum
+validation loss is retained for evaluation. The validation
+criterion and the contribution of each loss component are
+reported to ensure reproducibility.
+
+\subsection{Full-Scene Mineral Mapping}
+\label{subsec:scene_mapping}
+
+For complete orbital observations, the trained model is applied
+using chunk-wise inference to control memory consumption. Each
+scene is partitioned into spatial chunks of
+[VERIFY: chunk height $\times$ chunk width] and processed
+in mini-batches of [VERIFY: inference batch size].
+Boundary regions are handled using [VERIFY: actual boundary
+handling procedure] to preserve the original spatial
+arrangement.
+
+The predicted abundance vectors are reconstructed in their
+original spatial arrangement. Gaussian smoothing is subsequently
+applied independently to each abundance channel using a kernel
+size of [VERIFY] and standard deviation of [VERIFY].
+The dominant mineral at spatial position $(u,v)$ is determined
+from the predicted abundance channels as
+
+\begin{equation}
+\mathcal{M}(u,v)
+=
+\arg\max_{k}\hat{a}_{k}(u,v).
+\label{eq:mineral_map}
+\end{equation}
+
+The eight output channels are associated with the predefined
+mineral categories in the order specified during model
+configuration. The resulting dominant-mineral map is therefore
+derived from the abundance predictions after spatial
+post-processing. Spatial continuity is examined through
+[VERIFY: actual spatial validation procedure or qualitative
+visual inspection].
+
+The resulting abundance maps enable complete IIRS observations
+to be processed without loading the entire hyperspectral cube
+into memory, supporting scalable lunar mineral mapping.
+
+
+
+
+\begin{algorithm}[t]
+\caption{Full-Scene Lunar Mineral Mapping}
+\label{alg:scene_mapping}
+\begin{algorithmic}[1]
+\Require IIRS hyperspectral cube $\mathbf{X}$, trained model
+$f_{\theta}$, chunk size $C_L$, batch size $B_s$
+\Ensure Mineral map $\mathcal{M}$ and abundance maps $\hat{\mathbf{A}}$
+
+\State Partition $\mathbf{X}$ into spatial chunks of $C_L$ scan lines
+\State Initialize abundance map $\hat{\mathbf{A}}$
+
+\For{each spatial chunk $\mathbf{X}_c$}
+    \State Extract valid pixel spectra from $\mathbf{X}_c$
+    \State Normalize spectra using (\ref{eq:normalisation})
+
+    \For{each mini-batch $\mathbf{X}_b$}
+        \State $\hat{\mathbf{A}}_b \gets f_{\theta}(\mathbf{X}_b)$
+    \EndFor
+
+    \State Reconstruct spatial abundance arrangement for $\mathbf{X}_c$
+    \State Insert $\hat{\mathbf{A}}_c$ into $\hat{\mathbf{A}}$
+\EndFor
+
+\State Apply Gaussian smoothing to each abundance channel
+
+\For{each spatial position $(u,v)$}
+    \State $\mathcal{M}(u,v)
+    \gets \arg\max_k\hat{a}_k(u,v)$
+\EndFor
+
+\State \Return $\hat{\mathbf{A}},\mathcal{M}$
+\end{algorithmic}
+\end{algorithm} 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Results and Discussion}
+\label{sec:results}
+
+The proposed Vision Transformer (ViT) was evaluated in terms of spectral
+reconstruction, predicted mineral abundances, and full-scene mineral
+mapping. The analysis examines the model's ability to preserve the
+spectral characteristics of IIRS observations, generate mathematically
+constrained abundance predictions, and produce spatial mineral
+distributions. Reconstruction performance and abundance consistency are
+considered separately, since low spectral reconstruction error alone
+does not establish accurate mineral identification.
+
+\subsection{Spectral Reconstruction}
+\label{subsec:res_reconstruction}
+
+Figure~\ref{fig:rmse_reconstruction} shows the representative best,
+median, and worst spectral reconstruction cases. The reconstructed
+spectra closely follow the corresponding IIRS observations and preserve
+the major absorption characteristics near approximately $1.0$ and
+$2.0~\si{\micro\metre}$. The model also reduces localized high-frequency
+fluctuations while retaining the dominant spectral structure. Differences
+in reconstruction quality across the selected cases indicate that
+spectral variability and observation-related effects may influence
+model performance.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.85\columnwidth]{RMSEe1.png}
+    \caption{Representative spectral reconstruction results for the
+    best, median, and worst cases obtained by the proposed ViT.}
+    \label{fig:rmse_reconstruction}
+\end{figure}
+
+The quantitative reconstruction results are presented in
+Table~\ref{tab:quant_results}. The model achieved an RMSE of
+$0.03637$, MAE of $0.01420$, and SAD of $0.02314$, indicating that the
+reconstructed spectra retain the dominant characteristics of the input
+observations. The corresponding SRE and ERGAS values are $28.78434$
+and $31.14898$, respectively. These metrics assess spectral
+reconstruction quality rather than the accuracy of the predicted
+mineral abundances. Furthermore, the present results do not establish
+superiority over conventional or learning-based unmixing methods;
+comparative evaluation using the same data and metrics is required
+to support such a conclusion.
+
+\begin{table}[t]
+    \centering
+    \caption{Quantitative evaluation of the proposed ViT on the
+    held-out IIRS test set.}
+    \label{tab:quant_results}
+    \footnotesize
+    \setlength{\tabcolsep}{5pt}
+    \renewcommand{\arraystretch}{1.10}
+    \begin{tabular}{lc}
+        \toprule
+        \textbf{Metric} & \textbf{Proposed ViT} \\
+        \midrule
+        RMSE & 0.03637 \\
+        MAE & 0.01420 \\
+        SAD & 0.02314 \\
+        SRE & 28.78434 \\
+        ERGAS & 31.14898 \\
+        PSNR (dB) & 28.78434 \\
+        Abundance Sum Mean & 1.00000 \\
+        Abundance Sum Std. & $4.35\times10^{-8}$ \\
+        Abundance L1 Mean & 0.12500 \\
+        Negative Abundance Ratio & 0.00000 \\
+        Abundance Entropy Mean & 1.95543 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{table}[t]
+    \centering
+    \caption{Mineral-class distribution in the evaluated full-scene
+    mineralogical map.}
+    \label{tab:class_distribution}
+    \footnotesize
+    \setlength{\tabcolsep}{5pt}
+    \renewcommand{\arraystretch}{1.10}
+    \begin{tabular}{lrr}
+        \toprule
+        \textbf{Mineral Class} &
+        \textbf{Pixel Count} &
+        \textbf{Percentage (\%)} \\
+        \midrule
+        Plagioclase  & 43,948   & 3.19  \\
+        Pyroxene     & 232,881  & 16.90 \\
+        Olivine      & 6,797    & 0.49  \\
+        Ilmenite     & 8,642    & 0.63  \\
+        Spinel       & 205,677  & 14.92 \\
+        Glass        & 0        & 0.00  \\
+        Anorthosite  & 3,566    & 0.26  \\
+        Mare Basalt  & 876,739  & 63.61 \\
+        \midrule
+        \textbf{Total} &
+        \textbf{1,378,250} &
+        \textbf{100.00} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+The learned latent representations shown in
+Fig.~\ref{fig:learned_signatures} exhibit different patterns across
+the principal mineral categories. These representations indicate that
+the encoder captures variations in spectral features. However, latent
+features should not be interpreted as physically measured mineral
+endmember signatures or independent evidence of mineralogical
+separability.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\columnwidth]{LESS.png}
+    \caption{Learned latent spectral feature representations associated
+    with the principal lunar mineral categories extracted by the
+    proposed ViT encoder.}
+    \label{fig:learned_signatures}
+\end{figure}
+
+\begin{figure}[t]
+    \centering
+
+    \begin{subfigure}[t]{0.47\columnwidth}
+        \centering
+        \includegraphics[width=\linewidth]{ADPE.png}
+        \caption{Predicted abundance distributions.}
+        \label{fig:abundance_dist}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.47\columnwidth}
+        \centering
+        \includegraphics[width=\linewidth]{MMA.png}
+        \caption{Mean predicted mineral abundance.}
+        \label{fig:mean_abundance}
+    \end{subfigure}
+
+    \caption{Predicted mineral abundance distributions obtained by the
+    proposed ViT.}
+    \label{fig:abundance_analysis}
+\end{figure}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\columnwidth,height=0.75\columnwidth,
+    keepaspectratio]{osmm.png}
+    \caption{Original Chandrayaan-2 IIRS observation and corresponding
+    predicted mineral map generated by the proposed ViT.}
+    \label{fig:spatial_map_comparison}
+\end{figure}
+
+\subsection{Mineral Abundance Estimation}
+\label{subsec:res_abundance}
+
+The predicted abundance distributions are shown in
+Fig.~\ref{fig:abundance_dist}. Unlike hard classification, the proposed
+framework produces continuous mineral fractions for each spectral
+observation. The Softmax abundance head enforces
+
+\begin{equation}
+\sum_{k=1}^{K}\hat{a}_{k}=1,
+\qquad
+\hat{a}_{k}\geq0,
+\label{eq:abundance_constraints_results}
+\end{equation}
+
+ensuring that each predicted abundance vector forms a non-negative
+composition without requiring an additional constrained optimization
+step. This mathematical consistency is reflected by the abundance-sum
+mean of $1.00000$ and standard deviation of $4.35\times10^{-8}$ reported
+in Table~\ref{tab:quant_results}.
+
+The mean abundance distribution in
+Fig.~\ref{fig:mean_abundance} shows variation among the predicted
+mineral classes, with mare basalt and spinel representing prominent
+components of the evaluated observations. These values describe the
+model's predictions and should not be interpreted as independently
+validated mineral proportions.
+
+The zero negative-abundance ratio reported in
+Table~\ref{tab:quant_results} confirms that the predictions satisfy
+the non-negativity constraint. Nevertheless, the abundance-sum and
+non-negativity results establish mathematical consistency rather than
+mineralogical accuracy. Independent reference abundances or
+mineralogical measurements are required to quantitatively validate
+the predicted fractions.
+
+\subsection{Full-Scene Mineral Mapping}
+\label{subsec:res_spatial}
+
+The trained model was applied to the complete Chandrayaan-2 IIRS
+observations using the chunk-wise inference strategy described in
+Section~\ref{sec:methodology}. The resulting predicted mineral map is
+shown in Fig.~\ref{fig:spatial_map_comparison}.
+
+The generated map exhibits spatially continuous mineral distributions
+with reduced isolated pixel-level variations. The chunk-wise inference
+procedure enables the learned spectral model to process complete
+hyperspectral observations while maintaining their original spatial
+arrangement. However, spatial continuity alone does not confirm
+geological correctness, and the mapped patterns require comparison
+with independent lunar mineralogical references.
+
+The scene-level distribution is presented in
+Table~\ref{tab:class_distribution}. Mare basalt constituted the largest
+mapped fraction ($63.61\%$), followed by pyroxene ($16.90\%$) and
+spinel ($14.92\%$). Plagioclase accounted for $3.19\%$, whereas
+olivine, ilmenite, and anorthosite represented smaller fractions.
+No pixels were assigned to the glass class in the evaluated map.
+These percentages represent the distribution of predicted dominant
+mineral labels and do not indicate independently measured mineral
+abundances. In particular, the absence of glass assignments does not
+establish its geological absence from the observed region.
+
+Overall, the results demonstrate that the proposed ViT preserves
+spectral information, generates mathematically constrained abundance
+predictions, and supports full-scene lunar mineral mapping. While the
+reconstruction metrics and abundance constraints provide quantitative
+evidence of spectral fidelity and prediction consistency, respectively,
+independent mineralogical validation and comparative experiments are
+still required to establish the accuracy and relative effectiveness
+of the proposed framework.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Conclusion}
+\label{sec:conclusion}
+
+This paper presents a one-dimensional Vision Transformer framework for
+hyperspectral unmixing and lunar mineral mapping using Chandrayaan-2 IIRS
+observations. By representing spectra as spectral patches, the model uses
+self-attention to capture long-range spectral dependencies and jointly
+performs spectral reconstruction and physically constrained abundance
+prediction through a dual-head architecture. Its full-scene inference
+strategy enables efficient processing of large IIRS observations and
+generation of spatially distributed mineral maps.
+
+The results demonstrate the potential of transformer-based spectral
+representation learning for lunar hyperspectral analysis. While reconstruction
+metrics assess spectral reproduction, non-negative, sum-to-one abundance
+constraints ensure prediction consistency but do not independently validate
+mineralogical accuracy. The main contributions are the patch-based spectral
+attention architecture and efficient full-scene inference strategy. Current
+limitations include predefined mineral endmembers, variability in degraded
+orbital observations, and reliance on a single mission source. Future work
+will explore adaptive endmember extraction, independent mineralogical
+validation, cross-scene and cross-mission generalization, and physics-informed
+self-supervised learning to improve the reliability and robustness of
+planetary hyperspectral analysis.
+
+\begin{thebibliography}{11}
+
+\bibitem{chowdhury2020iirs}
+Chowdhury, A.R., Chauhan, P., Bugiolacchi, R., et al.:
+Planetary exploration of the Moon with Chandrayaan-2 Imaging Infrared Spectrometer (IIRS).
+Current Science \textbf{118}(3), 368--375 (2020).
+\doi{10.18520/cs/v118/i3/368-375}
+
+\bibitem{chauhan2021hydration}
+Chauhan, P., et al.:
+Unambiguous detection of OH and H$_2$O on the Moon from Chandrayaan-2 Imaging Infrared Spectrometer reflectance data using the 3~$\mu$m hydration feature.
+Current Science \textbf{121}(3), 391--401 (2021).
+\doi{10.18520/cs/v121/i3/391-401}
+
+\bibitem{dosovitskiy2021vit}
+Dosovitskiy, A., Beyer, L., Kolesnikov, A., Weissenborn, D., Zhai, X.,
+Unterthiner, T., Dehghani, M., Minderer, M., Heigold, G., Gelly, S.,
+Uszkoreit, J., Houlsby, N.:
+An Image is Worth 16$\times$16 Words: Transformers for Image Recognition at Scale.
+In: International Conference on Learning Representations (ICLR) (2021).
+\doi{10.48550/arXiv.2010.11929}
+
+\bibitem{xiong2020layernorm}
+Xiong, R., Yang, Y., He, D., Zheng, K., Zheng, S., Xing, C.,
+Zhang, H., Lan, Y., Wang, L., Liu, T.:
+On Layer Normalization in the Transformer Architecture.
+In: International Conference on Machine Learning (ICML),
+Proceedings of Machine Learning Research, vol.~119,
+pp. 10524--10533 (2020).
+\doi{10.48550/arXiv.2002.04745}
+
+\bibitem{bioucas2012unmixing}
+Bioucas-Dias, J.M., Plaza, A., Dobigeon, N., Parente, M., Du, Q.,
+Gader, P., Chanussot, J.:
+Hyperspectral Unmixing Overview: Geometrical, Statistical, and Sparse Regression-Based Approaches.
+IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing
+\textbf{5}(2), 354--379 (2012).
+\doi{10.1109/JSTARS.2012.2194696}
+
+\bibitem{hendrycks2016gelu}
+Hendrycks, D., Gimpel, K.:
+Gaussian Error Linear Units (GELUs).
+arXiv preprint arXiv:1606.08415 (2016).
+\doi{10.48550/arXiv.1606.08415}
+
+\bibitem{paoletti2019review}
+Paoletti, M.E., Haut, J.M., Plaza, J., Plaza, A.:
+Deep Learning Classifiers for Hyperspectral Imaging: A Review.
+ISPRS Journal of Photogrammetry and Remote Sensing
+\textbf{158}, 279--317 (2019).
+\doi{10.1016/j.isprsjprs.2019.09.006}
+
+\bibitem{hong2022spectralformer}
+Hong, D., Han, Z., Yao, J., Gao, L., Zhang, B., Plaza, A.,
+Chanussot, J.:
+SpectralFormer: Rethinking Hyperspectral Image Classification with Transformers.
+IEEE Transactions on Geoscience and Remote Sensing
+\textbf{60}, 1--15 (2022).
+\doi{10.1109/TGRS.2021.3130716}
+
+\bibitem{he2021sst}
+He, X., Chen, Y., Lin, Z.:
+Spatial--Spectral Transformer for Hyperspectral Image Classification.
+Remote Sensing \textbf{13}(3), 498 (2021).
+\doi{10.3390/rs13030498}
+
+\bibitem{sharma2024photometric}
+Sharma, V., Chauhan, P., Kumar, A.:
+Photometric Correction of Images Obtained from Chandrayaan-2 Imaging Infra-Red Spectrometer (IIRS) Data.
+Advances in Space Research
+\textbf{73}(4), 2105--2118 (2024).
+\doi{10.1016/j.asr.2023.09.015}
+
+\bibitem{zhang2016deeplearning}
+Zhang, L., Zhang, L., Du, B.:
+Deep Learning for Remote Sensing Data: A Technical Tutorial on the State of the Art.
+IEEE Geoscience and Remote Sensing Magazine
+\textbf{4}(2), 22--40 (2016).
+\doi{10.1109/MGRS.2016.2540798}
+
+\bibitem{sahoo2022latent}
+Sahoo, M.M., Porwal, A., Karnieli, A., et al.:
+Deep-Learning-Based Latent Space Encoding for Spectral Unmixing of Geological Materials.
+ISPRS Journal of Photogrammetry and Remote Sensing
+\textbf{183}, 307--320 (2022).
+
+\bibitem{shu2024datn}
+Shu, Z., Wang, Y., Yu, Z.:
+Dual Attention Transformer Network for Hyperspectral Image Classification.
+Engineering Applications of Artificial Intelligence
+\textbf{127}, 107351 (2024).
+
+
+\bibitem{su2019daen}
+Su, Y., Li, J., Plaza, A., Marinoni, A., Gamba, P., Chakravortty, S.:
+DAEN: Deep Autoencoder Networks for Hyperspectral Unmixing.
+IEEE Transactions on Geoscience and Remote Sensing
+\textbf{57}(7), 4309--4321 (2019).
+\doi{10.1109/TGRS.2018.2890633}
+
+\bibitem{wang2023integration}
+Chen, J., Zhao, M., Wang, X., Richard, C., Rahardja, S.:
+Integration of Physics-Based and Data-Driven Models for Hyperspectral
+Image Unmixing: A Summary of Current Methods.
+IEEE Signal Processing Magazine
+\textbf{40}(2), 61--74 (2023).
+\doi{10.1109/MSP.2022.3208987}
+
+\bibitem{hadi2023dctnu}
+Hadi, F., Yang, J., Farooque, G., Xiao, L.:
+Deep Convolutional Transformer Network for Hyperspectral Unmixing.
+European Journal of Remote Sensing
+\textbf{56}(1), Article 2268820 (2023).
+\doi{10.1080/22797254.2023.2268820}
+
+\bibitem{zhou2024blind}
+Zhou, C., Rodrigues, M.R.D.:
+Hyperspectral Blind Unmixing Using a Double Deep Image Prior.
+IEEE Transactions on Neural Networks and Learning Systems
+\textbf{35}(11), 16478--16492 (2024).
+\doi{10.1109/TNNLS.2023.3294714}
+
+\bibitem{yu2022multistage}
+Yu, Y., Ma, Y., Mei, X., Fan, F., Huang, J., Li, H.:
+Multi-Stage Convolutional Autoencoder Network for Hyperspectral Unmixing.
+International Journal of Applied Earth Observation and Geoinformation
+\textbf{113}, Article 102981 (2022).
+\doi{10.1016/j.jag.2022.102981}
+
+\end{thebibliography}
+\end{document}
